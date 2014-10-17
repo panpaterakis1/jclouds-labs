@@ -115,7 +115,12 @@ public class CloneAndRegisterMachineFromIMachineIfNotAlreadyExists implements Fu
 
       // registering
       manager.get().getVBox().registerMachine(clonedMachine);
+      
 
+      //FIX FOR VirtualBox 4.2
+      String command = "VBoxManage modifyvm " + clonedMachine.getName() + " --natdnshostresolver1 on";
+		
+      executeCommand(command);
       // Networking
       for (NetworkInterfaceCard networkInterfaceCard : networkSpec.getNetworkInterfaceCards()) {
          new AttachNicToMachine(vmSpec.getVmName(), machineUtils).apply(networkInterfaceCard);
@@ -123,11 +128,22 @@ public class CloneAndRegisterMachineFromIMachineIfNotAlreadyExists implements Fu
       
       // set only once the creds for this machine, same coming from its master
       logger.debug("<< storing guest credentials on vm(%s) as extra data", clonedMachine.getName());
-      String masterUsername = master.getExtraData(GUEST_OS_USER);
-      String masterPassword = master.getExtraData(GUEST_OS_PASSWORD);
+      String masterUsername = System.getProperty(GUEST_OS_USER);
+      String masterPassword = System.getProperty(GUEST_OS_PASSWORD);
       clonedMachine.setExtraData(GUEST_OS_USER, masterUsername);
       clonedMachine.setExtraData(GUEST_OS_PASSWORD, masterPassword);
 
       return clonedMachine;
+   }
+
+   private void executeCommand(String command) {
+   	Process p;
+	try {
+		p = Runtime.getRuntime().exec(command);
+		p.waitFor();
+	
+	} catch (Exception e) {
+		e.printStackTrace();
+	}
    }
 }

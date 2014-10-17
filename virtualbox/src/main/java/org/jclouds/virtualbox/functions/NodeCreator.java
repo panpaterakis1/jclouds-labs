@@ -27,7 +27,6 @@ package org.jclouds.virtualbox.functions;
  import org.jclouds.compute.ComputeServiceAdapter.NodeAndInitialCredentials;
  import org.jclouds.compute.domain.NodeMetadata;
  import org.jclouds.compute.domain.NodeMetadataBuilder;
- import org.jclouds.compute.options.RunScriptOptions;
  import org.jclouds.compute.reference.ComputeServiceConstants;
  import org.jclouds.domain.LoginCredentials;
  import org.jclouds.logging.Logger;
@@ -39,8 +38,6 @@ package org.jclouds.virtualbox.functions;
  import org.jclouds.virtualbox.domain.NetworkSpec;
  import org.jclouds.virtualbox.domain.NodeSpec;
  import org.jclouds.virtualbox.domain.VmSpec;
- import org.jclouds.virtualbox.statements.DeleteGShadowLock;
- import org.jclouds.virtualbox.statements.PasswordlessSudo;
  import org.jclouds.virtualbox.util.MachineController;
  import org.jclouds.virtualbox.util.MachineUtils;
  import org.jclouds.virtualbox.util.NetworkUtils;
@@ -110,8 +107,8 @@ public class NodeCreator implements Function<NodeSpec, NodeAndInitialCredentials
       checkNotNull(nodeSpec, "NodeSpec");
       Master master = checkNotNull(nodeSpec.getMaster(), "Master");
       IMachine masterMachine = master.getMachine();
-      String guestOsUser = masterMachine.getExtraData(GUEST_OS_USER);
-      String guestOsPassword = masterMachine.getExtraData(GUEST_OS_PASSWORD);
+      String guestOsUser = System.getProperty(GUEST_OS_USER);
+      String guestOsPassword = System.getProperty(GUEST_OS_PASSWORD);
 
       cleanUpMaster(master);
       CloneSpec cloneSpec = configureCloneSpec(nodeSpec, guestOsUser, guestOsPassword);
@@ -121,9 +118,6 @@ public class NodeCreator implements Function<NodeSpec, NodeAndInitialCredentials
       machineController.ensureMachineIsLaunched(cloneName);
       logger.debug("<< cloned vm(%s) is up and running", cloneName);
 
-      reconfigureNetworkInterfaces(masterMachine, guestOsUser, guestOsPassword, cloneSpec.getNetworkSpec(), clone);
-
-      postConfigurations(clone, guestOsUser, guestOsPassword);
 
       LoginCredentials credentials = LoginCredentials.builder()
                                                      .user(guestOsUser)
@@ -133,25 +127,6 @@ public class NodeCreator implements Function<NodeSpec, NodeAndInitialCredentials
       return new NodeAndInitialCredentials<IMachine>(clone, cloneName, credentials);
    }
 
-   private void reconfigureNetworkInterfaces(IMachine masterMachine, String guestOsUser, String guestOsPassword, NetworkSpec networkSpec, IMachine clone) {
-      reconfigureHostOnlyInterfaceIfNeeded(guestOsUser, guestOsPassword, clone.getName(), masterMachine.getOSTypeId());
-      logger.debug("<< reconfigured hostOnly interface of node(%s)", clone.getName());
-      reconfigureNatInterfaceIfNeeded(guestOsUser, guestOsPassword, clone.getOSTypeId(), clone, networkSpec);
-      logger.debug("<< reconfigured NAT interface of node(%s)", clone.getName());
-   }
-
-   /**
-    * {@see DeleteGShadowLock} and {@see PasswordlessSudo} for a detailed explanation
-    *
-    * @param clone the target machine
-    * @param guestOsUser the user to access the target machine
-    * @param guestOsPassword the password to access the target machine
-    */
-   private void postConfigurations(IMachine clone, String guestOsUser, String guestOsPassword) {
-      NodeMetadata partialNodeMetadata = buildPartialNodeMetadata(clone, guestOsUser, guestOsPassword);
-      machineUtils.runScriptOnNode(partialNodeMetadata, new DeleteGShadowLock(), RunScriptOptions.NONE);
-      machineUtils.runScriptOnNode(partialNodeMetadata, new PasswordlessSudo(partialNodeMetadata.getCredentials().identity), RunScriptOptions.Builder.runAsRoot(true));
-   }
 
    private CloneSpec configureCloneSpec(
            NodeSpec nodeSpec, String guestOsUser, String guestOsPassword) {
